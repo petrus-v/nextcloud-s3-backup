@@ -2,7 +2,7 @@
 _commit: 20a61d5
 _src_path: gh:browniebroke/pypackage-template
 add_me_as_contributor: true
-copyright_year: '2022'
+copyright_year: "2022"
 documentation: true
 email: pierreverkest84@gmail.com
 full_name: Pierre Verkest
@@ -17,4 +17,3 @@ run_poetry_install: true
 setup_github: false
 setup_pre_commit: true
 version: 0.0.1
-

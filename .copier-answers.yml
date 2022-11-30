@@ -1,0 +1,20 @@
+# Changes here will be overwritten by Copier
+_commit: 20a61d5
+_src_path: gh:browniebroke/pypackage-template
+add_me_as_contributor: true
+copyright_year: '2022'
+documentation: true
+email: pierreverkest84@gmail.com
+full_name: Pierre Verkest
+github_username: petrus-v
+initial_commit: true
+open_source_license: Apache Software License 2.0
+package_name: nc_s3_backup
+project_name: Nextcloud S3 Backup
+project_short_description: Nextcloud S3 primary storage incremental backup
+project_slug: nextcloud-s3-backup
+run_poetry_install: true
+setup_github: false
+setup_pre_commit: true
+version: 0.0.1
+

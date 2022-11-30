@@ -30,7 +30,24 @@
   <img src="https://img.shields.io/pypi/l/nextcloud-s3-backup.svg?style=flat-square" alt="License">
 </p>
 
-Nextcloud S3 primary storage incremental backup
+Nextcloud S3 primary storage incremental backup.
+
+This command line utility backup tool is designed to create incremental backup
+from Nextcloud S3 primary storage.
+
+When using Nextcloud S3 primary storage, files are stored with oid as reference likes `urn:oid:579`.
+
+Backuping those files are not easy to restore particular files.
+
+This tool is designed to:
+
+- re-create file tree
+- snapshot like
+- multiple backend tree (to manage access write)
+
+This tool is not designed for
+
+- quick restaure the whole nextcloud
 
 ## Installation
 

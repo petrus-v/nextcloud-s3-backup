@@ -40,10 +40,9 @@ jobs:
           - "3.8"
           - "3.9"
           - "3.10"
-          - "3.11"
+          # - "3.11" require https://github.com/liormizr/s3path/issues/112
         os:
           - ubuntu-latest
-          - windows-latest
           - macOS-latest
     runs-on: ${{ matrix.os }}
     steps:

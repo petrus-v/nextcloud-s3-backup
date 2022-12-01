@@ -404,7 +404,7 @@ python-versions = "*"
 name = "pyyaml"
 version = "6.0"
 description = "YAML parser and emitter for Python"
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.6"
 
@@ -673,7 +673,7 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.7"
-content-hash = "539b53e9b10bb95afc2c92f6e65f89f27296feb14eeda8eec4ada65ad9a673f0"
+content-hash = "c95a8a0a7101f73b13a2e38460e226bcfe57ea7b4d570ac5bf32e72cd7a7b0b6"
 
 [metadata.files]
 alabaster = [

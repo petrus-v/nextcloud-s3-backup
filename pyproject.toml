@@ -27,6 +27,7 @@ python = "^3.7"
 s3path = {git="https://github.com/petrus-v/s3path.git", branch="master", extras=["factory"]}
 psycopg2-binary = "^2.9.5"
 pydantic = "^1.10.2"
+pyyaml = "^6.0"
 
 [tool.poetry.scripts]
 nextcloud-s3-backup = "nc_s3_backup.cli:main"

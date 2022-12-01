@@ -43,7 +43,7 @@ This tool is designed to:
 
 - re-create file tree
 - snapshot like
-- multiple backend tree (to manage access write)
+- multiple storage tree (to manage access write)
 
 This tool is not designed for
 

@@ -24,10 +24,18 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.7"
+s3path = {git="https://github.com/petrus-v/s3path.git", branch="master", extras=["factory"]}
+psycopg2-binary = "^2.9.5"
+pydantic = "^1.10.2"
+
+[tool.poetry.scripts]
+nextcloud-s3-backup = "nc_s3_backup.cli:main"
+nextcloud-s3-backup-config = "nc_s3_backup.cli:config_helper"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0"
 pytest-cov = "^3.0"
+freezegun = "^1.2.2"
 
 [tool.poetry.group.docs]
 optional = true

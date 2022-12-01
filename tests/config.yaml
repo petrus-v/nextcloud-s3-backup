@@ -1,0 +1,18 @@
+backup_date_format: "%y%m"
+excluded_mimetype_ids: [15, 84]
+mapping:
+  - backup_root_path: ./backup/data
+    bucket: s3://test-bucket/
+    nextcloud_path: ""
+    storage_id: 2
+    user_name: pverkest
+  - backup_root_path: ./backup/data
+    bucket: s3://test-bucket/
+    nextcloud_path: files/projects/
+    storage_id: 3
+    user_name: mc
+  - backup_root_path: ./backup/sensitive_data
+    bucket: s3://test-bucket/
+    nextcloud_path: files/HR/
+    storage_id: 3
+    user_name: mc

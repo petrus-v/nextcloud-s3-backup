@@ -6,7 +6,11 @@ from unittest import mock
 import pytest
 from freezegun import freeze_time
 
-from nc_s3_backup.api.backup import REPOSITORY_DIRNAME, NextcloudS3Backup
+from nc_s3_backup.api.backup import (
+    REPOSITORY_DIRNAME,
+    SNAPSHOT_DIRNAME,
+    NextcloudS3Backup,
+)
 from nc_s3_backup.api.config import NextcloudDirectoryConfig, NextCloudS3BackupConfig
 from nc_s3_backup.api.db import DaoNextcloudFiles, NextcloudFile
 
@@ -94,6 +98,7 @@ def _test_backup_file(test_dir, s3_present=True, repo_present=False):
     )
     local_file = (
         root_backup
+        / SNAPSHOT_DIRNAME
         / datetime.now().strftime("%y")
         / "pverkest"
         / "files/some/path/to/file.txt"

@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 REPOSITORY_DIRNAME = ".data"
+SNAPSHOT_DIRNAME = "snapshots"
 
 
 @dataclass
@@ -53,6 +54,7 @@ class NextcloudS3Backup:
         repo_file = dir_config.backup_root_path / REPOSITORY_DIRNAME / nc_file.hash_path
         local_file = (
             dir_config.backup_root_path
+            / SNAPSHOT_DIRNAME
             / self.current_backup_formatted_date
             / dir_config.user_name
         ) / nc_file.path

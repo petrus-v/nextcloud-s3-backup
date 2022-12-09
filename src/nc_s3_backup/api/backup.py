@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import os
 from dataclasses import dataclass
@@ -68,8 +69,30 @@ class NextcloudS3Backup:
         )
         if not repo_file.exists():
             if s3_path.exists():
-                repo_file.parent.mkdir(parents=True, exist_ok=True)
-                s3_path.copy(repo_file)
+                downloading_path = repo_file.with_suffix(".downloading")
+                downloading_path.parent.mkdir(parents=True, exist_ok=True)
+                s3_path.copy(downloading_path)
+                sha1 = (  # nosec
+                    "SHA1:" f"{hashlib.sha1(downloading_path.read_bytes()).hexdigest()}"
+                )
+                if sha1.lower() != nc_file.checksum.lower():
+                    logger.warning(
+                        "SHA1 hash mismatched on file %s (%s). "
+                        "NC table: %s - downloaded: %s. "
+                        "Use local downloaded file hash instead.",
+                        nc_file.fileid,
+                        nc_file.path,
+                        nc_file.checksum,
+                        sha1,
+                    )
+                    nc_file.checksum = sha1
+                    repo_file = (
+                        dir_config.backup_root_path
+                        / REPOSITORY_DIRNAME
+                        / nc_file.hash_path
+                    )
+                    repo_file.parent.mkdir(parents=True, exist_ok=True)
+                downloading_path.rename(repo_file)
             else:
                 logger.warning(
                     "Ignoring Nextcloud record DB file not found on s3. "

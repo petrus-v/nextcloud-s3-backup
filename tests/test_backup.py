@@ -69,7 +69,12 @@ def test_backup(dao_mock, backup_mock):
         ]
 
 
-def _test_backup_file(test_dir, s3_present=True, repo_present=False):
+def _test_backup_file(
+    test_dir,
+    s3_present=True,
+    repo_present=False,
+    checksum="SHA1:ba8607f049f59aeadcff2adb9fae48d0cf16b4ad",
+):
     bucket = test_dir / "bucket-test"
     bucket.mkdir(parents=True, exist_ok=True)
     root_backup = test_dir / "var" / "backup"
@@ -86,9 +91,15 @@ def _test_backup_file(test_dir, s3_present=True, repo_present=False):
         fileid=33,
         storage=2,
         path="files/some/path/to/file.txt",
-        checksum="SHA1:00abcd",
+        checksum=checksum,
     )
-    expected_repo_file = root_backup / REPOSITORY_DIRNAME / "sha1" / "00" / "abcd"
+    expected_repo_file = (
+        root_backup
+        / REPOSITORY_DIRNAME
+        / "sha1"
+        / "ba"
+        / "8607f049f59aeadcff2adb9fae48d0cf16b4ad"
+    )
     if repo_present:
         expected_repo_file.parent.mkdir(parents=True, exist_ok=True)
         expected_repo_file.touch()
@@ -105,7 +116,7 @@ def _test_backup_file(test_dir, s3_present=True, repo_present=False):
     )
     s3_path = bucket / "urn:oid:33"
     if s3_present:
-        s3_path.touch()
+        s3_path.write_bytes(b"Binary file contents")
 
     assert s3_path.exists() == s3_present
     assert expected_repo_file.exists() == repo_present
@@ -162,6 +173,19 @@ def test_ignore_missing_s3_file_data_not_exists(dao_mock, tmpdir, patch_path_get
     assert not s3.exists()
     assert not repo.exists()
     assert not local.exists()
+
+
+@mock.patch("nc_s3_backup.api.db.Dao")
+def test_download_sha1_mismatch(dao_mock, tmpdir, patch_path_get):
+    res, s3, repo, local = _test_backup_file(
+        Path(str(tmpdir)), s3_present=True, repo_present=False, checksum="SHA1:wrong"
+    )
+    assert res == local
+    assert s3.exists()
+    assert repo.exists()
+    assert repo.is_file()
+    assert local.exists()
+    assert local.is_file()
 
 
 @mock.patch("nc_s3_backup.api.db.Dao")

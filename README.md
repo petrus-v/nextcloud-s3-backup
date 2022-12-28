@@ -72,11 +72,11 @@ Once the script has been executed you will get the following tree:
 │   │   │   │   └── e3f6d2149...          # this files is not use anymore by any snapshot and can be "garbage collected"
 │   │   │   ├── ...
 │   │   │   └── ff
-│   │   ├── etag                          # Files created/copied/updated/moved through nextcloud that have been upload in multipart
+│   │   ├── etag                          # Files created/copied/updated/moved through nextcloud
                                           # haven't any SHA1 nor valid md5 here we save etag hardlink to sha1 files
                                           # as we can retrieve etag from s3 without download files
                                           # file that have sha1 filled do not necessaraly have md5/etag
-│   │   │   ├── aa                        # 2 first md5 character to limit the number of files per directory.
+│   │   │   ├── aa                        # 2 first etag character to limit the number of files per directory.
 │   │   │   │   ├── wxyz...abc-3          # file name is etag from remote and is an hardlink to sha1
 │   │   │   │   ├── ...
 │   │   │   │   └── abce...efg-2          # files not use anymore by any snapshot and can be "garbage collected"

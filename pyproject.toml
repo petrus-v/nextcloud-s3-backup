@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nextcloud-s3-backup"
-version = "0.0.1"
+version = "0.0.2"
 description = "Nextcloud S3 primary storage incremental backup"
 authors = ["Pierre Verkest <pierreverkest84@gmail.com>"]
 license = "Apache Software License 2.0"

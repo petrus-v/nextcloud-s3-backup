@@ -5,6 +5,7 @@ import subprocess  # nosec
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from time import perf_counter
 
 from nc_s3_backup.api.config import NextcloudDirectoryConfig, NextCloudS3BackupConfig
 from nc_s3_backup.api.db import DaoNextcloudFiles, NextcloudFile
@@ -14,6 +15,21 @@ logger = logging.getLogger(__name__)
 
 REPOSITORY_DIRNAME = ".data"
 SNAPSHOT_DIRNAME = "snapshots"
+
+time_reports = {}
+
+
+def timer(func):
+    def wrap_func(*args, **kwargs):
+        t1 = perf_counter()
+        result = func(*args, **kwargs)
+        t2 = perf_counter()
+        if func.__name__ not in time_reports.keys():
+            time_reports[func.__name__] = []
+        time_reports[func.__name__].append(t2 - t1)
+        return result
+
+    return wrap_func
 
 
 @dataclass
@@ -37,7 +53,20 @@ class NextcloudS3Backup:
         logger.info("%s mapping to backup", len(self.config.mapping))
         for dir_config in self.config.mapping:
             self._backup_directory(dir_config)
+
+        self.print_timer_info()
         logger.info("Backup done")
+
+    def print_timer_info(self):
+        logger.info("Timmer info...")
+        for method_name, times in time_reports.items():
+            logger.info(
+                "Method %s - Calls count: %d - Total time: %d - AVG: %d",
+                method_name,
+                len(times),
+                sum(times),
+                sum(times) / len(times),
+            )
 
     def _backup_directory(self, dir_config: NextcloudDirectoryConfig):
         logger.info(
@@ -50,6 +79,7 @@ class NextcloudS3Backup:
         ):
             self._backup_file(nc_file, dir_config)
 
+    @timer
     def _backup_file(
         self, nc_file: NextcloudFile, dir_config: NextcloudDirectoryConfig
     ):
@@ -81,10 +111,16 @@ class NextcloudS3Backup:
         os.link(repo_file, local_file)
         return local_file
 
+    @timer
+    def _download_s3_file(self, s3_path: Path, download_path: Path):
+        s3_path.copy(download_path)
+
+    @timer
     def _compute_sha1(self, file: Path) -> str:
         # consider stream file as allowed from python 3.11
         return f"SHA1:{hashlib.sha1(file.read_bytes()).hexdigest()}"  # nosec
 
+    @timer
     def _backup_file_with_sha1(
         self,
         nc_file: NextcloudFile,
@@ -96,7 +132,7 @@ class NextcloudS3Backup:
             if s3_path.exists():
                 downloading_path = repo_file.with_suffix(".downloading")
                 downloading_path.parent.mkdir(parents=True, exist_ok=True)
-                s3_path.copy(downloading_path)
+                self._download_s3_file(s3_path, downloading_path)
                 sha1 = self._compute_sha1(downloading_path)
                 if sha1.lower() != nc_file.checksum.lower():
                     logger.warning(
@@ -126,6 +162,7 @@ class NextcloudS3Backup:
                 return
         return repo_file
 
+    @timer
     def _backup_file_without_sha1(
         self,
         nc_file: NextcloudFile,
@@ -137,6 +174,7 @@ class NextcloudS3Backup:
                 nc_file,
                 dir_config,
                 s3_path,
+                f"ETAG:{s3_path.stat().etag}",
             )
         else:
             logger.warning(
@@ -147,6 +185,7 @@ class NextcloudS3Backup:
             )
             return
 
+    @timer
     def _find_sha1_from_inode(
         self, dir_config: NextcloudDirectoryConfig, inode: int
     ) -> Path:
@@ -168,13 +207,15 @@ class NextcloudS3Backup:
             sha1 = None
         return sha1
 
+    @timer
     def _backup_file_with_etag(
         self,
         nc_file: NextcloudFile,
         dir_config: NextcloudDirectoryConfig,
         s3_path: Path,
+        etag: str,
     ) -> Path:
-        nc_file.checksum = f"ETAG:{s3_path.stat().etag}"
+        nc_file.checksum = etag
         etag_repo_file = (
             dir_config.backup_root_path / REPOSITORY_DIRNAME / nc_file.hash_path
         )
@@ -182,7 +223,7 @@ class NextcloudS3Backup:
         if not etag_repo_file.exists():
             downloading_path = etag_repo_file.with_suffix(".downloading")
             downloading_path.parent.mkdir(parents=True, exist_ok=True)
-            s3_path.copy(downloading_path)
+            self._download_s3_file(s3_path, downloading_path)
             nc_file.checksum = self._compute_sha1(downloading_path)
             repo_file = (
                 dir_config.backup_root_path / REPOSITORY_DIRNAME / nc_file.hash_path

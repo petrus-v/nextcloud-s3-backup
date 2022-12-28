@@ -127,7 +127,6 @@ class DaoNextcloudFiles(Dao):
             WHERE storage=%(storage_id)s
                 AND path ILIKE %(path)s
                 AND mimetype NOT IN %(excluded_mimetype)s
-                AND NOT (checksum IS NULL OR checksum = '')
         """
         self._cr.execute(
             query,

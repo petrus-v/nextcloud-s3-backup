@@ -89,6 +89,19 @@ class NextcloudS3Backup:
             / self.current_backup_formatted_date
             / dir_config.user_name
         ) / nc_file.path
+        if nc_file.size == 0:
+            # mainly caused by this issue
+            # https://github.com/nextcloud/desktop/issues/4909
+            # (files with data store in resource fork only are not synced
+            # by nextcloud client) we got a lot of empty file in our nextcloud
+            # so we get the hardlink count limit maximum (~65000 links with less
+            # than 30 snapshots)
+            # In such case of empty file we leave placeholder creating new empty file
+            # instead hard links based on the nextcloud table information
+            local_file.parent.mkdir(parents=True, exist_ok=True)
+            local_file.touch()
+            return local_file
+
         s3_path = dir_config.bucket / f"urn:oid:{nc_file.fileid}"
         logger.debug(
             "Backup-ing %s - %s - %s to %s...",

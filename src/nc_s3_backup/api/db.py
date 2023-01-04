@@ -39,6 +39,7 @@ class NextcloudFile:
     storage: int
     path: str
     checksum: str
+    size: int
 
     @property
     def hash_path(self):
@@ -122,7 +123,7 @@ class DaoNextcloudFiles(Dao):
         search_path = root_path + "%"
         # TODO: manage checksum null or empty
         query = """
-            SELECT fileid, storage, path, checksum
+            SELECT fileid, storage, path, checksum, size
             FROM oc_filecache
             WHERE storage=%(storage_id)s
                 AND path ILIKE %(path)s

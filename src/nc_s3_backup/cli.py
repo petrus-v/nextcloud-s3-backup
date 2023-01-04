@@ -90,7 +90,7 @@ def s3_params(parser):
         dest="s3_multipart_chunksize_mb",
         default=100,
         type=int,
-        help=("The partition size of each part for a " "multipart transfer. (MB)"),
+        help=("The partition size of each part for a multipart transfer. (MB)"),
     )
     group_s3_transfer.add_argument(
         "--s3-no-threads",

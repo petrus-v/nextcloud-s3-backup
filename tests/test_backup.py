@@ -1,3 +1,4 @@
+import hashlib
 import os
 import shutil
 from datetime import datetime
@@ -67,12 +68,14 @@ def test_backup(dao_mock, backup_mock):
         storage=2,
         path="files/some/path/to/file.txt",
         checksum="SHA1:00dea5ca03e5597312d44b767b4c1394d34d1623",
+        size=2,
     )
     f2 = NextcloudFile(
         fileid=88,
         storage=2,
         path="files/other/file.txt",
         checksum="SHA1:0d3ra5ca03e5597312d44b767b4c1394d34d14df",
+        size=5,
     )
     with mock.patch(
         "nc_s3_backup.api.db.DaoNextcloudFiles.get_nc_subtree", return_value=[f1, f2]
@@ -95,11 +98,12 @@ def _test_backup_file(
     etag_repo_present=False,
     etag="ETAG:dd0a2a1748da571835f70c95340aa6a7-2",
     checksum="SHA1:ba8607f049f59aeadcff2adb9fae48d0cf16b4ad",
+    content=b"Binary file contents",
 ):
     bucket = test_dir / "bucket-test"
     bucket.mkdir(parents=True, exist_ok=True)
     fake_file = test_dir / "test-content-file"
-    fake_file.write_bytes(b"Binary file contents")
+    fake_file.write_bytes(content)
     root_backup = test_dir / "var" / "backup"
     assert not root_backup.exists()
 
@@ -115,14 +119,10 @@ def _test_backup_file(
         storage=2,
         path="files/some/path/to/file.txt",
         checksum=checksum,
+        size=fake_file.stat().st_size,
     )
-    expected_repo_file = (
-        root_backup
-        / REPOSITORY_DIRNAME
-        / "sha1"
-        / "ba"
-        / "8607f049f59aeadcff2adb9fae48d0cf16b4ad"
-    )
+    sha1 = hashlib.sha1(fake_file.read_bytes()).hexdigest()  # nosec
+    expected_repo_file = root_backup / REPOSITORY_DIRNAME / "sha1" / sha1[:2] / sha1[2:]
     if repo_present:
         expected_repo_file.parent.mkdir(parents=True, exist_ok=True)
         os.link(fake_file, expected_repo_file)
@@ -346,6 +346,30 @@ def test_backup_without_sha1_ignore_missing_s3_file_data_not_exists(
     assert not repo.exists()
     assert not local.exists()
     assert not etag_repo.exists()
+
+
+@mock.patch("nc_s3_backup.api.db.Dao")
+def test_empty_content_do_not_create_data_file_nor_hardlink(
+    dao_mock, tmpdir, patch_path_get
+):
+    """Due to https://github.com/nextcloud/desktop/issues/4909 issue
+    on nextcloud client where software use only resource fork to save
+    data we are getting a lot of empty file. Knowing empty file is yet
+    interessing as file placeholder so we won't create hardlink but
+    only touch file to create empty file inplace"""
+    res, s3, repo, local, etag_repo = _test_backup_file(
+        Path(str(tmpdir)),
+        s3_present=True,
+        repo_present=False,
+        etag_repo_present=False,
+        checksum="SHA1:da39a3ee5e6b4b0d3255bfef95601890afd80709",
+        content=b"",
+    )
+    assert res == local
+    assert s3.exists()
+    assert not repo.exists()
+    assert not etag_repo.exists()
+    assert local.exists()
 
 
 @mock.patch("nc_s3_backup.api.db.Dao")

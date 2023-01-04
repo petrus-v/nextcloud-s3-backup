@@ -7,5 +7,6 @@ def test_nc_file():
         storage=99,
         path="/files/some/path/to/file.txt",
         checksum="SHA1:00dea5ca03e5597312d44b767b4c1394d34d1623",
+        size=23,
     )
     assert str(nc_file.hash_path) == "sha1/00/dea5ca03e5597312d44b767b4c1394d34d1623"

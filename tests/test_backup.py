@@ -96,6 +96,7 @@ def _test_backup_file(
     s3_present=True,
     repo_present=False,
     etag_repo_present=False,
+    etag_is_hard_linked=True,
     etag="ETAG:dd0a2a1748da571835f70c95340aa6a7-2",
     checksum="SHA1:ba8607f049f59aeadcff2adb9fae48d0cf16b4ad",
     content=b"Binary file contents",
@@ -136,7 +137,10 @@ def _test_backup_file(
     )
     if etag_repo_present:
         expected_etag_repo_file.parent.mkdir(parents=True, exist_ok=True)
-        os.link(fake_file, expected_etag_repo_file)
+        if etag_is_hard_linked:
+            os.link(fake_file, expected_etag_repo_file)
+        else:
+            shutil.copy(fake_file, expected_etag_repo_file)
 
     nc_backup = NextcloudS3Backup(
         DaoNextcloudFiles("postgres://test"),
@@ -306,6 +310,32 @@ def test_backup_without_sha1_etag_sha1_and_etag_present_file_create_link(
 
 
 @mock.patch("nc_s3_backup.api.db.Dao")
+def test_inconsistency_data(dao_mock, tmpdir, patch_path_get, patch_stat_result):
+    """Assume etag and sha1 are present but without hard link
+    probably due to some badly sync data between serveurs
+    """
+    patch_stat_result("dd0a2a1748da571835f70c95340aa6a7-2")
+    res, s3, repo, local, etag_repo = _test_backup_file(
+        Path(str(tmpdir)),
+        s3_present=True,
+        repo_present=True,
+        etag_repo_present=True,
+        etag_is_hard_linked=False,
+        etag="ETAG:dd0a2a1748da571835f70c95340aa6a7-2",
+        checksum=None,
+    )
+    assert res == local
+    assert s3.exists()
+    assert repo.exists()
+    assert repo.is_file()
+    assert local.exists()
+    assert local.is_file()
+    assert etag_repo.exists()
+    assert etag_repo.is_file()
+    assert repo.stat().st_ino == local.stat().st_ino == etag_repo.stat().st_ino
+
+
+@mock.patch("nc_s3_backup.api.db.Dao")
 def test_backup_without_sha1_repo_not_present_etag_present(
     dao_mock, tmpdir, patch_path_get, patch_stat_result
 ):
@@ -374,7 +404,6 @@ def test_empty_content_do_not_create_data_file_nor_hardlink(
 
 @mock.patch("nc_s3_backup.api.db.Dao")
 def test_current_backup_formatted_date(dao_mock):
-
     nc_backup = NextcloudS3Backup(
         DaoNextcloudFiles("postgres://test"),
         config=NextCloudS3BackupConfig(

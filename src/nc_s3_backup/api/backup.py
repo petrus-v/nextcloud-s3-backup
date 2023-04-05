@@ -204,9 +204,10 @@ class NextcloudS3Backup:
     def _find_sha1_from_inode(
         self, dir_config: NextcloudDirectoryConfig, inode: int
     ) -> Path:
+        sha1_directory = dir_config.backup_root_path / REPOSITORY_DIRNAME / "sha1"
         command = [
             "find",
-            str(dir_config.backup_root_path / REPOSITORY_DIRNAME / "sha1"),
+            str(sha1_directory),
             "-inum",
             str(inode),
         ]
@@ -216,7 +217,12 @@ class NextcloudS3Backup:
             res = subprocess.run(  # nosec
                 command, shell=False, check=True, capture_output=True
             )
-            sha1 = Path(res.stdout.decode().strip("\n"))
+            res = res.stdout.decode().strip("\n").strip()
+            if not res:
+                raise Exception(
+                    f"No file found in {sha1_directory} directory with inode {inode}"
+                )
+            sha1 = Path(res)
         except Exception as ex:
             logger.warning("Ignore error while getting sha1 on inode %s: %s", inode, ex)
             sha1 = None
@@ -260,8 +266,17 @@ class NextcloudS3Backup:
                 repo_file = (
                     dir_config.backup_root_path / REPOSITORY_DIRNAME / nc_file.hash_path
                 )
-                repo_file.parent.mkdir(parents=True, exist_ok=True)
-                os.link(etag_repo_file, repo_file)
+                if repo_file.exists():
+                    # assuming inconsistency data wrongly synced
+                    # .data losing hardlink
+                    # in such case the best thing to do is to recreate
+                    # etag from sha1 as long snapshot files point to sha1 files
+                    # we do not want to remove sha1
+                    etag_repo_file.unlink()
+                    os.link(repo_file, etag_repo_file)
+                else:
+                    repo_file.parent.mkdir(parents=True, exist_ok=True)
+                    os.link(etag_repo_file, repo_file)
             else:
                 sha1 = "".join(repo_file.parts[:2])
                 nc_file.checksum = f"SHA1:{sha1}"

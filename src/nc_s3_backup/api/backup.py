@@ -1,6 +1,7 @@
 import hashlib
 import logging
 import os
+import statistics
 import subprocess  # nosec
 from dataclasses import dataclass
 from datetime import datetime
@@ -61,11 +62,12 @@ class NextcloudS3Backup:
         logger.info("Timmer info...")
         for method_name, times in time_reports.items():
             logger.info(
-                "Method %s - Calls count: %d - Total time: %d - AVG: %d",
+                "Method %s - Calls count: %d - Total time: %d - AVG: %d - MEDIAN: %d",
                 method_name,
                 len(times),
                 sum(times),
-                sum(times) / len(times),
+                statistics.mean(times),
+                statistics.median(times),
             )
 
     def _backup_directory(self, dir_config: NextcloudDirectoryConfig):

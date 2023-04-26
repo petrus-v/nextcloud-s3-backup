@@ -53,7 +53,6 @@ class NextcloudFile:
 
 
 class Dao:
-
     _cr = None
     _cnx = None
     _ids = 0

@@ -7,7 +7,6 @@ from pydantic.dataclasses import dataclass
 
 @dataclass
 class NextcloudDirectoryConfig:
-
     storage_id: int = None
     user_name: str = None
     bucket: Path = None

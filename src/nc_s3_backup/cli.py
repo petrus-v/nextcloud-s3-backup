@@ -13,7 +13,11 @@ from s3path import PureS3Path, register_configuration_parameter
 from uri_pathlib_factory import load_pathlib_monkey_patch
 from yaml import safe_dump, safe_load
 
-from nc_s3_backup.api.backup import NextcloudS3Backup
+from nc_s3_backup.api.backup import (
+    REPOSITORY_DIRNAME,
+    SNAPSHOT_DIRNAME,
+    NextcloudS3Backup,
+)
 from nc_s3_backup.api.config import NextcloudDirectoryConfig, NextCloudS3BackupConfig
 from nc_s3_backup.api.db import DaoNextcloudFiles
 
@@ -255,7 +259,6 @@ def parse_config(config_file):
 
 
 def main(testing: bool = False):
-
     parser = argparse.ArgumentParser(
         description="Nextcloud S3 backup",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -286,10 +289,52 @@ def main(testing: bool = False):
 
     parse_setup_s3(arguments)
     config = parse_config(arguments.config)
-
+    arguments.config.close()
     dao = DaoNextcloudFiles(arguments.pg_dsn, schema=arguments.pg_schema)
     nextcloud_s3_backup = NextcloudS3Backup(dao, config)
     nextcloud_s3_backup.backup()
+    if testing:
+        return nextcloud_s3_backup
+
+
+def purge(testing: bool = False):
+    parser = argparse.ArgumentParser(
+        description=(
+            "Nextcloud S3 backup purge\n\n"
+            "Use with caution! \n"
+            "This script loop over uniques backup_root_path present "
+            "in your config file to remove files present in "
+            f"the {REPOSITORY_DIRNAME} that are not present in "
+            f"the {SNAPSHOT_DIRNAME} dicectory"
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "config",
+        type=argparse.FileType("r"),
+        help=(
+            "Nextcloud S3 backup config file is a json/yaml file that "
+            "contains mapping of directories to backup."
+        ),
+    )
+    logging_params(parser)
+    arguments = parser.parse_args()
+
+    logging.basicConfig(
+        level=getattr(logging, arguments.logging_level.upper()),
+        format=arguments.logging_format,
+    )
+    if arguments.logging_file:
+        try:
+            json_config = json.loads(arguments.logging_file.read())
+            logging.config.dictConfig(json_config)
+        except json.JSONDecodeError:
+            logging.config.fileConfig(arguments.logging_file.name)
+
+    config = parse_config(arguments.config)
+    arguments.config.close()
+    nextcloud_s3_backup = NextcloudS3Backup(None, config)
+    nextcloud_s3_backup.purge()
     if testing:
         return nextcloud_s3_backup
 
@@ -358,6 +403,7 @@ def config_helper():
 
     arguments = parser.parse_args()
     config = parse_config(arguments.config)
+    arguments.config.close()
     if any(
         [
             arguments.storage_id,

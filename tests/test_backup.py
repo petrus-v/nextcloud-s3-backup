@@ -123,7 +123,9 @@ def _test_backup_file(
         size=fake_file.stat().st_size,
     )
     sha1 = hashlib.sha1(fake_file.read_bytes()).hexdigest()  # nosec
-    expected_repo_file = root_backup / REPOSITORY_DIRNAME / "sha1" / sha1[:2] / sha1[2:]
+    sha1_dir = root_backup / REPOSITORY_DIRNAME / "sha1"
+    sha1_dir.mkdir(parents=True, exist_ok=True)
+    expected_repo_file = sha1_dir / sha1[:2] / sha1[2:]
     if repo_present:
         expected_repo_file.parent.mkdir(parents=True, exist_ok=True)
         os.link(fake_file, expected_repo_file)

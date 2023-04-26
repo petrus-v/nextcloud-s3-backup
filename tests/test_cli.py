@@ -1,7 +1,8 @@
+from pathlib import PosixPath
 from unittest import mock
 
 from nc_s3_backup.api.backup import NextcloudS3Backup
-from nc_s3_backup.cli import main
+from nc_s3_backup.cli import main, purge
 
 
 @mock.patch("nc_s3_backup.api.backup.NextcloudS3Backup.backup")
@@ -39,3 +40,22 @@ def test_main_cli(dao_mock, backup_mock):
     assert nc_s3_backup.config.mapping[0].storage_id == 2
     assert nc_s3_backup.config.mapping[0].user_name == "pverkest"
     assert nc_s3_backup.config.mapping[1].nextcloud_path == "files/projects/"
+
+
+@mock.patch("nc_s3_backup.api.backup.NextcloudS3Backup.purge")
+def test_purge_cli(purge_mock):
+    with mock.patch(
+        "sys.argv",
+        [
+            "nextcloud-s3-backup-purge-prog",
+            "tests/config.yaml",
+        ],
+    ):
+        nc_s3_backup = purge(testing=True)
+
+    assert isinstance(nc_s3_backup, NextcloudS3Backup)
+    purge_mock.assert_called_once()
+    assert len(nc_s3_backup.config.mapping) == 3
+    assert sorted(nc_s3_backup.distinct_backup_root_paths) == sorted(
+        [PosixPath("./backup/data"), PosixPath("./backup/sensitive_data")]
+    )

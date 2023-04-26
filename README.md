@@ -75,7 +75,7 @@ Once the script has been executed you will get the following tree:
 │   │   ├── etag                          # Files created/copied/updated/moved through nextcloud
                                           # haven't any SHA1 nor valid md5 here we save etag hardlink to sha1 files
                                           # as we can retrieve etag from s3 without download files
-                                          # file that have sha1 filled do not necessaraly have md5/etag
+                                          # file that have sha1 filled do not necessarily have md5/etag
 │   │   │   ├── aa                        # 2 first etag character to limit the number of files per directory.
 │   │   │   │   ├── wxyz...abc-3          # file name is etag from remote and is an hardlink to sha1
 │   │   │   │   ├── ...
@@ -138,6 +138,127 @@ Once the script has been executed you will get the following tree:
 > but we won't it would be the donwlonding boto3 role).
 
 ## Usage
+
+### Backup
+
+Backup nextcloud data
+
+```bash
+nextcloud-s3-backup -h
+usage: nextcloud-s3-backup [-h] [-f LOGGING_FILE] [-l LOGGING_LEVEL] [--logging-format LOGGING_FORMAT] [--s3-endpoint-url S3_ENDPOINT_URL] [--s3-region-name S3_REGION_NAME] [--s3-access-key S3_ACCESS_KEY_ID]
+                           [--s3-secret-key S3_SECRET_ACCESS_KEY] [--s3-multipart-threshold S3_MULTIPART_THRESHOLD_MB] [--s3-multipart-chunksize S3_MULTIPART_CHUNKSIZE_MB] [--s3-no-threads]
+                           [--s3-max-bandwidth S3_MAX_BANDWIDTH_MB] [--s3-max-concurrency S3_MAX_CONCURRENCY] [--s3-num-download-attempts S3_NUM_DOWNLOAD_ATTEMPTS] [--s3-max-io-queue S3_MAX_IO_QUEUE_MB]
+                           [--s3-io-chunksize S3_IO_CHUNKSIZE_MB] [--s3-progress] [--pg-dsn PG_DSN] [--pg-schema PG_SCHEMA]
+                           config
+
+Nextcloud S3 backup
+
+positional arguments:
+  config                Nextcloud S3 backup config file is a json/yaml file that contains mapping of directories to backup.
+
+optional arguments:
+  -h, --help            show this help message and exit
+
+Logging params:
+  -f LOGGING_FILE, --logging-file LOGGING_FILE
+                        Logging configuration file, (logging-level and logging-format are ignored if provide) (default: None)
+  -l LOGGING_LEVEL, --logging-level LOGGING_LEVEL
+  --logging-format LOGGING_FORMAT
+
+S3 configuration:
+  --s3-endpoint-url S3_ENDPOINT_URL
+                        S3 endpoint url (default: https://s3.fr-par.scw.cloud)
+  --s3-region-name S3_REGION_NAME
+                        S3 region name. (default: fr-par)
+  --s3-access-key S3_ACCESS_KEY_ID
+                        S3 access key ID. (default: None)
+  --s3-secret-key S3_SECRET_ACCESS_KEY
+                        S3 secret key. (default: None)
+
+S3 Transfer configuration:
+  --s3-multipart-threshold S3_MULTIPART_THRESHOLD_MB
+                        The transfer size threshold for which multipart uploads, downloads, and copies will automatically be triggered.. (MB) (default: 120)
+  --s3-multipart-chunksize S3_MULTIPART_CHUNKSIZE_MB
+                        The partition size of each part for a multipart transfer. (MB) (default: 100)
+  --s3-no-threads       If False, threads will be used when performing S3 transfers. If True, no threads will be used in performing transfers; all logic will be run in the main thread. (default: False)
+  --s3-max-bandwidth S3_MAX_BANDWIDTH_MB
+                        The maximum bandwidth that will be consumed in uploading and downloading file content. The value is an integer in terms of Mega bytes per second. (MB) (default: None)
+  --s3-max-concurrency S3_MAX_CONCURRENCY
+                        The maximum number of threads that will be making requests to perform a transfer. If ``use_threads`` is set to ``False``, the value provided is ignored as the transfer will only ever
+                        use the main thread. (10) (default: 10)
+  --s3-num-download-attempts S3_NUM_DOWNLOAD_ATTEMPTS
+                        The number of download attempts that will be retried upon errors with downloading an object in S3. Note that these retries account for errors that occur when streaming down the data
+                        from s3 (i.e. socket errors and read timeouts that occur after receiving an OK response from s3). Other retryable exceptions such as throttling errors and 5xx errors are already retried
+                        by botocore (this default is 5). This does not take into account the number of exceptions retried by botocore. (default: 5)
+  --s3-max-io-queue S3_MAX_IO_QUEUE_MB
+                        The maximum amount of read parts that can be queued in memory to be written for a download. The size of each of these read parts is at most the size of ``io_chunksize``. (MB) (default:
+                        100)
+  --s3-io-chunksize S3_IO_CHUNKSIZE_MB
+                        The max size of each chunk in the io queue. Currently, this is size used when ``read`` is called on the downloaded stream as well. (MB) (default: 1)
+  --s3-progress         Display upload/downloads progress in stdout. To be use with --mt-thread-size=1 not properly working otherwise (default: False)
+
+Postgresql connection:
+  --pg-dsn PG_DSN       Postgresql connection string (default: postgresql:///nc-backup?application_name=nextcloud-s3-backup)
+  --pg-schema PG_SCHEMA
+                        Postgresql default schema (default: public)
+```
+
+### Purge .data/ directory
+
+This script is about removing .data/[sha1|etag] files to give freespace by
+removing files that are not present in snapshot directory.
+
+This script assume you have already remove old/unwanted snapshots
+otherwise we don't expect to remove any files.
+
+```bash
+nextcloud-s3-backup-purge -h
+usage: nextcloud-s3-backup-purge [-h] [-f LOGGING_FILE] [-l LOGGING_LEVEL] [--logging-format LOGGING_FORMAT] config
+
+Nextcloud S3 backup purge Use with caution! This script loop over uniques backup_root_path present in your config file to remove files present in the .data that are not present in the snapshots dicectory
+
+positional arguments:
+  config                Nextcloud S3 backup config file is a json/yaml file that contains mapping of directories to backup.
+
+optional arguments:
+  -h, --help            show this help message and exit
+
+Logging params:
+  -f LOGGING_FILE, --logging-file LOGGING_FILE
+                        Logging configuration file, (logging-level and logging-format are ignored if provide) (default: None)
+  -l LOGGING_LEVEL, --logging-level LOGGING_LEVEL
+  --logging-format LOGGING_FORMAT
+```
+
+### Prepare config file
+
+This script help to write/edit the config file
+
+```
+nextcloud-s3-backup-config -h
+usage: nextcloud-s3-backup-config [-h] [--storage-id STORAGE_ID] [--user-name USER_NAME] [--bucket BUCKET] [--nextcloud-path NEXTCLOUD_PATH] [--backup-root-path BACKUP_ROOT_PATH] {json,yaml} config
+
+Helper to validate/convert NextCloudS3Configand add entry. Do not change current files, display result in output.
+
+positional arguments:
+  {json,yaml}           choose output format
+  config                Nextcloud S3 backup config file is a json/yaml file that contains mapping of directories to backup.
+
+optional arguments:
+  -h, --help            show this help message and exit
+
+Optional add mapping:
+  --storage-id STORAGE_ID
+                        Nextcloud storage id (`storage`), used to query oc_filecache table (default: None)
+  --user-name USER_NAME
+                        User name used to create directory root tree and make config file easier to read. This value can differ from nextcloud database information (default: None)
+  --bucket BUCKET       S3 bucket uri. the root directory where are stored Nextcloud user storage. ie: s3://com.example.nextcloud/ (default: None)
+  --nextcloud-path NEXTCLOUD_PATH
+                        Root path to archive for given storage user as seen in nextcloud (default: None)
+  --backup-root-path BACKUP_ROOT_PATH
+                        Root path where to backup files (default: None)
+
+```
 
 ## Contributors ✨
 

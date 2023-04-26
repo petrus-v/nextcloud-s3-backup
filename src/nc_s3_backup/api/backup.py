@@ -3,10 +3,12 @@ import logging
 import os
 import statistics
 import subprocess  # nosec
+from collections import namedtuple
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
+from typing import List, Set
 
 from nc_s3_backup.api.config import NextcloudDirectoryConfig, NextCloudS3BackupConfig
 from nc_s3_backup.api.db import DaoNextcloudFiles, NextcloudFile
@@ -16,8 +18,10 @@ logger = logging.getLogger(__name__)
 
 REPOSITORY_DIRNAME = ".data"
 SNAPSHOT_DIRNAME = "snapshots"
-
+GB = 1024 * 1024 * 1024
 time_reports = {}
+
+PurgedFile = namedtuple("PurgedFile", ["size"])
 
 
 def timer(func):
@@ -58,11 +62,84 @@ class NextcloudS3Backup:
         self.print_timer_info()
         logger.info("Backup done")
 
+    @property
+    def distinct_backup_root_paths(self):
+        return list({conf.backup_root_path for conf in self.config.mapping})
+
+    @timer
+    def purge(self):
+        purged = []
+        logger.info("Purging %d directories", len(self.distinct_backup_root_paths))
+        for root_path in self.distinct_backup_root_paths:
+            snapshots_inodes = self._get_inodes(root_path / SNAPSHOT_DIRNAME)
+            repo_purged = self._purge_directory(
+                root_path / REPOSITORY_DIRNAME / "sha1", snapshots_inodes
+            )
+            logger.info(
+                "**SHA1** Directory: %s - %d file(s) removed that represent %.3f GB",
+                root_path,
+                len(repo_purged),
+                sum([f.size for f in repo_purged]),
+            )
+            purged.extend(repo_purged)
+            # purging etag separately because:
+            # * sha1 and etags are hard linked to and we just purge sha1
+            #   files that are not present in snapshots
+            # * we don't want to sum etag and sha1 file size
+            etag_purged = self._purge_directory(
+                root_path / REPOSITORY_DIRNAME / "etag", snapshots_inodes
+            )
+            logger.info(
+                "**Etag** Directory: %s - %d file(s) removed that represent %.3f GB",
+                root_path,
+                len(etag_purged),
+                sum([f.size for f in etag_purged]),
+            )
+        self.print_timer_info()
+        logger.info(
+            "Total purged: %d file(s) removed that represent %.3f GB",
+            len(repo_purged) + len(etag_purged),
+            sum([f.size for f in repo_purged]),
+        )
+
+    @timer
+    def _get_inodes(self, directory: Path, inodes: Set[int] = None) -> Set[int]:
+        if not inodes:
+            inodes = set()
+        for child in directory.iterdir():
+            if child.is_dir():
+                inodes = self._get_inodes(child, inodes=inodes)
+            else:
+                inodes |= {child.stat().st_ino}
+        return inodes
+
+    @timer
+    def _purge_directory(
+        self, repo_directory: Path, snapshots_inodes: Set[int]
+    ) -> List[PurgedFile]:
+        purged = []
+        for child in repo_directory.iterdir():
+            if child.is_dir():
+                purged.extend(self._purge_directory(child, snapshots_inodes))
+            else:
+                purged.extend(self._purge_file(child, snapshots_inodes))
+        return purged
+
+    @timer
+    def _purge_file(
+        self, repo_file: Path, snapshots_inodes: Set[int]
+    ) -> List[PurgedFile]:
+        unlink_file_stat = []
+        if repo_file.stat().st_ino not in snapshots_inodes:
+            unlink_file_stat.append(PurgedFile(size=repo_file.stat().st_size / GB))
+            repo_file.unlink()
+        return unlink_file_stat
+
     def print_timer_info(self):
         logger.info("Timmer info...")
         for method_name, times in time_reports.items():
             logger.info(
-                "Method %s - Calls count: %d - Total time: %d - AVG: %d - MEDIAN: %d",
+                "Method %s - Calls count: %d - Total time: %.1f - AVG: %.5f - MEDIAN: %.5f",
                 method_name,
                 len(times),
                 sum(times),
@@ -130,8 +207,9 @@ class NextcloudS3Backup:
     def _download_s3_file(self, s3_path: Path, download_path: Path):
         s3_path.copy(download_path)
 
+    @classmethod
     @timer
-    def _compute_sha1(self, file: Path) -> str:
+    def _compute_sha1(cls, file: Path) -> str:
         # consider stream file as allowed from python 3.11
         return f"SHA1:{hashlib.sha1(file.read_bytes()).hexdigest()}"  # nosec
 
@@ -202,31 +280,38 @@ class NextcloudS3Backup:
 
     @timer
     def _find_sha1_from_inode(
-        self, dir_config: NextcloudDirectoryConfig, inode: int
+        self, dir_config: NextcloudDirectoryConfig, searched_file: Path
     ) -> Path:
         sha1_directory = dir_config.backup_root_path / REPOSITORY_DIRNAME / "sha1"
+        files = self._find_files_with_same_inode_as(sha1_directory, searched_file)
+        if files:
+            # only the first one we shouldn't get two here
+            return files[0]
+        logger.warning(
+            "No sha1 files found searching files %s in %s",
+            searched_file,
+            sha1_directory,
+        )
+        return files
+
+    def _find_files_with_same_inode_as(
+        self, root_search_directory: Path, searched_file: Path
+    ):
+        inode = searched_file.stat().st_ino
         command = [
             "find",
-            str(sha1_directory),
+            str(root_search_directory),
             "-inum",
             str(inode),
         ]
         logger.debug("Running %s...", command)
-        sha1 = None
-        try:
-            res = subprocess.run(  # nosec
-                command, shell=False, check=True, capture_output=True
-            )
-            res = res.stdout.decode().strip("\n").strip()
-            if not res:
-                raise Exception(
-                    f"No file found in {sha1_directory} directory with inode {inode}"
-                )
-            sha1 = Path(res)
-        except Exception as ex:
-            logger.warning("Ignore error while getting sha1 on inode %s: %s", inode, ex)
-            sha1 = None
-        return sha1
+        res = subprocess.run(  # nosec
+            command, shell=False, check=True, capture_output=True
+        )
+        res = res.stdout.decode().split("\n")
+        found_files = [Path(res_path.strip()) for res_path in res if res_path.strip()]
+
+        return found_files
 
     @timer
     def _backup_file_with_etag(
@@ -257,9 +342,7 @@ class NextcloudS3Backup:
                 repo_file.parent.mkdir(parents=True, exist_ok=True)
                 os.link(etag_repo_file, repo_file)
         else:
-            repo_file = self._find_sha1_from_inode(
-                dir_config, etag_repo_file.stat().st_ino
-            )
+            repo_file = self._find_sha1_from_inode(dir_config, etag_repo_file)
             if not repo_file or not repo_file.exists():
                 # weird case
                 nc_file.checksum = self._compute_sha1(etag_repo_file)

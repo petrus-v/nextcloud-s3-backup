@@ -148,6 +148,7 @@ def _test_backup_file(
         DaoNextcloudFiles("postgres://test"),
         config=NextCloudS3BackupConfig(mapping=[nc_dir_conf], backup_date_format="%y"),
     )
+    nc_backup.populate_sha1_file_per_inode(nc_dir_conf)
     local_file = (
         root_backup
         / SNAPSHOT_DIRNAME

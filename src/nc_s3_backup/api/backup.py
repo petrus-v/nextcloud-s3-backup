@@ -2,13 +2,12 @@ import hashlib
 import logging
 import os
 import statistics
-import subprocess  # nosec
 from collections import namedtuple
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
-from typing import List, Set
+from typing import Dict, List, Set
 
 from nc_s3_backup.api.config import NextcloudDirectoryConfig, NextCloudS3BackupConfig
 from nc_s3_backup.api.db import DaoNextcloudFiles, NextcloudFile
@@ -46,6 +45,31 @@ class NextcloudS3Backup:
 
     _current_backup_formatted_date: datetime = None
 
+    _sha1_file_per_inode: Dict[int, Path] = None
+
+    @timer
+    def populate_sha1_file_per_inode(self, dir_config: NextcloudDirectoryConfig):
+        sha1_dir = dir_config.backup_root_path / REPOSITORY_DIRNAME / "sha1"
+        if sha1_dir.exists():
+            self._sha1_file_per_inode = self._populate_sha1_file_per_inode(
+                dir_config.backup_root_path / REPOSITORY_DIRNAME / "sha1", {}
+            )
+        else:
+            self._sha1_file_per_inode = {}
+
+    def _populate_sha1_file_per_inode(
+        self, directory: Path, inodes: Dict[int, Path] = None
+    ) -> Set[int]:
+        for child in directory.iterdir():
+            if child.is_dir():
+                inodes = self._populate_sha1_file_per_inode(child, inodes=inodes)
+            else:
+                inodes[child.stat().st_ino] = child
+        return inodes
+
+    def _ensure_sha1_file_per_inode_exists(self, repo_file):
+        self._sha1_file_per_inode[repo_file.stat().st_ino] = repo_file
+
     @property
     def current_backup_formatted_date(self):
         if not self._current_backup_formatted_date:
@@ -57,6 +81,7 @@ class NextcloudS3Backup:
     def backup(self):
         logger.info("%s mapping to backup", len(self.config.mapping))
         for dir_config in self.config.mapping:
+            self.populate_sha1_file_per_inode(dir_config)
             self._backup_directory(dir_config)
 
         self.print_timer_info()
@@ -197,6 +222,7 @@ class NextcloudS3Backup:
             repo_file = self._backup_file_without_sha1(nc_file, dir_config, s3_path)
             if not repo_file:
                 return
+        self._ensure_sha1_file_per_inode_exists(repo_file)
         # from python 3.10 only
         # local_file.hardlink_to(repo_file)
         local_file.parent.mkdir(parents=True, exist_ok=True)
@@ -283,35 +309,22 @@ class NextcloudS3Backup:
         self, dir_config: NextcloudDirectoryConfig, searched_file: Path
     ) -> Path:
         sha1_directory = dir_config.backup_root_path / REPOSITORY_DIRNAME / "sha1"
-        files = self._find_files_with_same_inode_as(sha1_directory, searched_file)
-        if files:
+        repo_file = self._find_files_with_same_inode_as(sha1_directory, searched_file)
+        if repo_file:
             # only the first one we shouldn't get two here
-            return files[0]
+            return repo_file
         logger.warning(
-            "No sha1 files found searching files %s in %s",
+            "No sha1 files found searching files %s (inode: %s) in %s",
             searched_file,
+            searched_file.stat().st_ino,
             sha1_directory,
         )
-        return files
+        return repo_file
 
     def _find_files_with_same_inode_as(
         self, root_search_directory: Path, searched_file: Path
     ):
-        inode = searched_file.stat().st_ino
-        command = [
-            "find",
-            str(root_search_directory),
-            "-inum",
-            str(inode),
-        ]
-        logger.debug("Running %s...", command)
-        res = subprocess.run(  # nosec
-            command, shell=False, check=True, capture_output=True
-        )
-        res = res.stdout.decode().split("\n")
-        found_files = [Path(res_path.strip()) for res_path in res if res_path.strip()]
-
-        return found_files
+        return self._sha1_file_per_inode.get(searched_file.stat().st_ino)
 
     @timer
     def _backup_file_with_etag(
